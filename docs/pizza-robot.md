@@ -93,6 +93,41 @@ What it established, and how sure it is:
   at 0.8 for the barely-moving wrist rolls). That is slower than the interpolating planner's
   old 2.5 rad/s, and it makes long moves exceed the API's default `max_steps`; pass 800.
 
+## Checked against the real demonstrations (creep / perception)
+
+`pizza-robot/scripts/check_creep_real.py` replays the 30 real episodes through the real-robot
+perception and the creep helper, with no robot or simulator: real joints give the fingertip (FK),
+real frames give what the cameras saw, and the operator's own next 0.5 s is the reference.
+
+```bash
+# 1. dense frames (finetune-groot env has pyarrow); cam0 = overhead, cam1 = wrist
+/workspace/finetune-groot/.venv/bin/python pizza-robot/real/export_dense.py /tmp/dense \
+    --data-dir /workspace/finetune-groot/outputs/pizza_hf/cleaned --names salami cheese
+# 2. where operators grasp each topping (writes pizza-robot/real/pick_spots.json)
+.venv-system2/bin/python pizza-robot/real/derive_pick_spots.py /tmp/dense
+# 3. the comparison
+.venv-system2/bin/python pizza-robot/scripts/check_creep_real.py /tmp/dense
+```
+
+What it found, 12 clean picks (8 cheese, 4 salami) and 146 approach frames:
+
+| Question | Result |
+| --- | --- |
+| Which camera is which? | cam0 = overhead, cam1 = wrist (jaws visible at the bottom of cam1). |
+| Overhead intrinsics | The frames are 640x480 **squashed** to 224x224. Treating them as square pixels made fx 33% too large (every x wrong). Fixed: `RealCameraModel(source_size=(640, 480))`. The pizza centre now projects within 1.4 / 5.2 px of the real sauce blob (21 episodes). |
+| Sim hue segmenter on real images | Unusable: "salami" is the pizza sauce (same hue 0-12°, sat 0.3-0.5, val 0.3-0.4; localized 339 mm off), "cheese" is never found (real shreds are pale cream, not yellow). |
+| Real-scene segmenter (`real_segmentation.py`) | Tray position first, colour second. Cheese: overhead 29 mm / wrist 21 mm median error vs where the operator closed the jaws; salami 49 / 23 mm. |
+| Tray landmarks | By-eye tray centres miss the cheese grasp by 47 mm. Centring on the operators' grasp spot (leave-one-out) gives 26 mm, and moves the segmenter's cheese error 44 → 29 mm (overhead). Salami has 4 picks spread ±47 mm: too few, keeps the landmark. |
+| Wrist mount | Assumed = the model's own `wrist` camera. A fit to the pizza disc across 794 frames found **no better mount** (held-out IoU 0.383 → 0.385), and the score falls on both sides of the design mount for every parameter (±0.1-0.2 rad, ±3-6 cm, ±10-20° fov), so the data supports it to about that precision. |
+| Camera disagreement | Overhead and wrist estimates differ by a median 27 mm (p90 41), and the gap tracks the error (r = 0.58). The simulator thresholds (agree 15 mm, conflict 50 mm) penalised 86% of real frames; `creep --profile real` uses 25 / 70 mm. |
+| Overhead score | Does not predict error on the real overhead view (r = +0.24), so it is fixed at 0.7; the wrist score does (r = -0.37). Before this the creep held on 47% of overhead-only frames; now 3-5%. |
+| Direction | With real perception the horizontal step points toward the operator's pick at cos 0.86 (overhead) / 0.92 (both cameras); fused item error 24 mm. |
+| Step size | Operator: median 1.6 cm / 0.5 s (p90 4.2). Creep: median 0.5-0.6 cm with real perception, 1.2 cm with a perfect estimate. Deliberately conservative; raise `--max-step` if the agent's cycle time makes it too slow. |
+| Joint motion | Holding the gripper orientation costs ~2.5x the operator's joint motion per cm (wrist pitch 0.047 vs 0.002 rad/cm): the operator lets the tilt drift (median 3.7° per 0.5 s). IK with a looser orientation weight does not change this, because the exact solution exists. Fixing it needs an orientation-relaxed objective in the shared IK. Open. |
+
+Not established: any closed-loop behaviour on the real arm; the segmenter on real frames with the arm
+over the tray (the overhead view is often partly occluded); salami picking (only 4 clean picks).
+
 ## What the scene is, and why it looks like this
 
 `pizza-robot/scene/elrobot_table.xml` descends from the hand-built scene in

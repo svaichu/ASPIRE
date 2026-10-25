@@ -152,9 +152,24 @@ SAM3. Only the vocabulary below is understood; anything else is refused with the
   task context for grasp depth, not the localized z.
 - Positions are accurate to a few millimetres for isolated items. A cluster that merges
   into one region (two touching slices) is a sign to re-look, not to trust the centre.
-- `camera_name="wrist"` works but only sees what the gripper points at; plan with
-  the overhead camera. The arm in view hides what is under it: **retract to Home before
-  counting or judging placement**.
+- `camera_name="wrist"` works but only sees what the gripper points at (from Home it looks at
+  the gripper itself); plan with the overhead camera and use the wrist to refine once the
+  fingertip is over the region ([creep-toward](../manipulation-tasks/creep-toward.md)). The arm
+  in view hides what is under it: **retract to Home before counting or judging placement**.
+- `at X,Y` (base-frame metres, e.g. `salami at 0.22,0.25`) picks the instance nearest that point
+  in the chosen camera, instead of by how it looks. Use it to ask the wrist camera for the very
+  slice the overhead camera found; each camera's own `center`/`left` can be a different one.
+- On the real robot `plant` in the controller metadata is `remote-real`: you run in the cloud and
+  every motion is executed across a network link before you see it, so keep commands small.
+
+### On the real robot (`plant: remote-real`)
+
+The table above is the simulator's colour segmenter, which does not work on real images (salami
+matches the pizza sauce, cheese is not yellow). Here the segmenter finds toppings by **tray
+position** first: queries `salami`, `cheese`, `olives`; there is no `plate`. A result is the
+topping inside its tray, accurate to about 25-30 mm, not a single slice, and `z` is a plane
+estimate, not a measured top surface. Pick the slice from the wrist image, and use the item
+heights in the task context for grasp depth. See [creep-toward](../manipulation-tasks/creep-toward.md).
 
 ## Evidence rules specific to this station
 

@@ -1,0 +1,93 @@
+{
+ "spots": {
+  "cheese": {
+   "xy": [
+    -0.0324,
+    0.3424
+   ],
+   "z": 0.0365,
+   "n": 8,
+   "std_xy_mm": [
+    16.0,
+    16.0
+   ],
+   "episodes": {
+    "cheese1": [
+     -0.0332,
+     0.3235,
+     0.03
+    ],
+    "cheese2": [
+     -0.0344,
+     0.3369,
+     0.0372
+    ],
+    "cheese3": [
+     -0.0561,
+     0.3287,
+     0.0285
+    ],
+    "cheese4": [
+     -0.0295,
+     0.3393,
+     0.0358
+    ],
+    "cheese5": [
+     -0.033,
+     0.3642,
+     0.041
+    ],
+    "symmetric-cheese4": [
+     -0.0057,
+     0.3454,
+     0.0317
+    ],
+    "symmetric-cheese5": [
+     -0.0032,
+     0.3589,
+     0.0467
+    ],
+    "symmetric-cheese6": [
+     -0.0318,
+     0.369,
+     0.0586
+    ]
+   }
+  },
+  "salami": {
+   "xy": [
+    0.0107,
+    0.1644
+   ],
+   "z": 0.0494,
+   "n": 4,
+   "std_xy_mm": [
+    47.0,
+    33.0
+   ],
+   "episodes": {
+    "salami1": [
+     -0.0401,
+     0.1568,
+     0.0406
+    ],
+    "salami2": [
+     -0.0138,
+     0.172,
+     0.0536
+    ],
+    "symmetric-salami2": [
+     0.0831,
+     0.2293,
+     0.0601
+    ],
+    "symmetric-salami6": [
+     0.0352,
+     0.1406,
+     0.0451
+    ]
+   }
+  }
+ },
+ "provenance": "fingertip (forward kinematics) at the first jaw close after opening, near the table; derived by pizza-robot/real/derive_pick_spots.py from ApoorvaBajaj/pizza-topping-camera-cleaned"
+}

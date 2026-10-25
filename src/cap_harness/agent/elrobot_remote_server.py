@@ -29,6 +29,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-token", help="require this token from the bridge")
     parser.add_argument("--layout", help="layout.json holding the real camera fit")
     parser.add_argument("--sam3-url")
+    parser.add_argument(
+        "--sim-segmenter", action="store_true",
+        help="use the simulator's hue segmenter instead of the real-scene one (it cannot work on real images)",
+    )
     args = parser.parse_args(argv)
 
     import uvicorn
@@ -37,12 +41,18 @@ def main(argv: list[str] | None = None) -> int:
     from cap_harness.elrobot.config import load_config
     from cap_harness.elrobot.ik import ElRobotIKProvider
     from cap_harness.elrobot.kinematics import ElRobotKinematics
-    from cap_harness.elrobot.remote import RealCameraModel, RemoteElRobotStation, RemoteLink
+    from cap_harness.elrobot.remote import (
+        RealCameraModel,
+        RemoteElRobotStation,
+        RemoteLink,
+        WristCameraModel,
+    )
     from cap_harness.elrobot.remote_policy import AspirePolicy
 
     config = load_config("pizza")
     link = RemoteLink()
-    cameras = {"overhead": RealCameraModel.from_layout(config, args.layout)}
+    overhead = RealCameraModel.from_layout(config, args.layout)
+    cameras = {"overhead": overhead, "wrist": WristCameraModel(config, overhead.table_z)}
     env = RemoteElRobotStation(
         config, link, cameras,
         kinematics=ElRobotKinematics(config),  # its own instance: FK must not reseed the IK solver
@@ -57,10 +67,16 @@ def main(argv: list[str] | None = None) -> int:
             from cap_harness.providers.sam3 import Sam3Provider
 
             options["segmentation_provider"] = Sam3Provider(base_url=args.sam3_url)
-        else:
+        elif args.sim_segmenter:
             from cap_harness.elrobot.segmentation import ColorSegmentationProvider
 
             options["segmentation_provider"] = ColorSegmentationProvider()
+        else:
+            # On the real frames hue alone matches the pizza sauce for "salami" and finds no
+            # "cheese" at all; the real-scene segmenter localizes by tray position first.
+            from cap_harness.elrobot.real_segmentation import RealSceneSegmentationProvider
+
+            options["segmentation_provider"] = RealSceneSegmentationProvider()
         _, runtime = build_elrobot_runtime(env, allow_motion=args.allow_motion, **options)
         stack.callback(runtime.close)
 

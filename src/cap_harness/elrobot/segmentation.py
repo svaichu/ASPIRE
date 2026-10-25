@@ -20,6 +20,11 @@ image, as the camera sees it -- the overhead view is mirrored, image-left is +x 
 the base frame), ``smallest``. With no qualifier the largest, least-occluded one
 comes first.
 
+``at X,Y`` (base-frame metres, e.g. ``salami at 0.22,0.25``) names the instance by where it is
+instead of how it looks: the one whose projection lands nearest that point in this camera. Use it
+to ask the wrist camera for the very item the overhead camera found, since each camera's own
+"center" or "left" can be a different slice.
+
 Items lying on the plate are a different population from items waiting in a bin, so a
 query for an ingredient skips whatever is on the plate -- "salami center" stays
 "the middle of the bin" as the plate fills up. Ask for "salami on the plate" to get
@@ -29,6 +34,7 @@ the placed ones instead.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 import numpy as np
 from scipy import ndimage
@@ -135,12 +141,42 @@ def _on_plate(segmentation: Segmentation, region: np.ndarray) -> bool:
     return bool(region[int(rows.mean()), int(cols.mean())])
 
 
-def _order(found: list[Segmentation], text: str) -> list[Segmentation]:
+_AT_POINT = re.compile(r"\bat\s*\(?\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)?")
+#: Height above the table of the point an ``at X,Y`` query is projected from, metres.
+AT_POINT_Z_M = 0.02
+
+
+def _project_to_pixels(observation: CameraObservation, point_base: np.ndarray) -> np.ndarray | None:
+    """``(row, col)`` of a base-frame point in this camera, or None if it is behind it."""
+    from scipy.spatial.transform import Rotation
+
+    pose = observation.camera_pose
+    w, x, y, z = pose.quaternion_wxyz
+    rotation = Rotation.from_quat([x, y, z, w]).as_matrix()
+    in_camera = rotation.T @ (point_base - np.asarray(pose.position, dtype=np.float64))
+    if in_camera[2] <= 1e-6:
+        return None
+    k = np.asarray(observation.intrinsics, dtype=np.float64)
+    return np.array(
+        [k[1, 1] * in_camera[1] / in_camera[2] + k[1, 2], k[0, 0] * in_camera[0] / in_camera[2] + k[0, 2]]
+    )
+
+
+def _order(
+    found: list[Segmentation], text: str, observation: CameraObservation | None = None
+) -> list[Segmentation]:
     """Reorder instances by a spatial qualifier in the query; stable when there is none."""
     if len(found) < 2:
         return found
     centres = np.array([np.argwhere(s.mask).mean(axis=0) for s in found])  # (row, col)
     words = set(text.lower().replace(",", " ").split())
+    at = _AT_POINT.search(text.lower())
+    if at and observation is not None and observation.camera_pose is not None:
+        target = _project_to_pixels(
+            observation, np.array([float(at.group(1)), float(at.group(2)), AT_POINT_Z_M])
+        )
+        if target is not None:
+            return [found[i] for i in np.argsort(np.linalg.norm(centres - target, axis=1), kind="stable")]
     if words & {"center", "centre", "middle", "central"}:
         key = np.linalg.norm(centres - centres.mean(axis=0), axis=1)
     elif words & {"left", "leftmost"}:
@@ -203,7 +239,7 @@ class ColorSegmentationProvider:
             region = _plate_region(_hsv(np.asarray(observation.rgb)))
             wanted_on_plate = "plate" in str(query).lower()
             instances = [s for s in instances if _on_plate(s, region) == wanted_on_plate]
-        instances = _order(instances, str(query))
+        instances = _order(instances, str(query), observation)
         if not instances:
             return self._fail(
                 f"no {cls.name}-coloured region is visible from this camera",

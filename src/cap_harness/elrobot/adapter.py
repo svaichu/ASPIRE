@@ -256,7 +256,8 @@ class ElRobotAdapter:
             if grip_column is None
             else np.asarray(grip_column, dtype=np.float64).reshape(-1)
         )
-        times = np.arange(len(rows)) * float(trajectory.dt_s)
+        # Planned waypoints exclude the start pose, so the first one is a tick ahead of it.
+        times = (np.arange(len(rows)) + 1) * float(trajectory.dt_s)
         if len(rows) == 1:  # a one-waypoint trajectory still needs a duration to stream
             times, rows, grippers = (
                 np.array([0.0, self.control_period_s]),

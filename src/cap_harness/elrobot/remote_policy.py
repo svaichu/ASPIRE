@@ -43,10 +43,12 @@ class AspirePolicy(BasePolicy):
         state = np.asarray(observation.get("state", {}).get("state", ()))
         if state.size < 8 or not np.isfinite(state).all():
             raise ValueError("observation['state']['state'] must hold 8 finite position_norm values")
-        for alias, frames in observation.get("video", {}).items():
+        video = observation.get("video", {})
+        for required in self.aliases:
+            if required not in video:
+                raise ValueError(f"missing camera {required!r}; this station requires {list(self.aliases)}")
+        for alias, frames in video.items():
             frames = np.asarray(frames)
-            if alias not in self.aliases:
-                raise ValueError(f"unknown camera {alias!r}; this station has {list(self.aliases)}")
             if frames.dtype != np.uint8 or frames.shape[-1] != 3:
                 raise ValueError(f"video[{alias!r}] must be uint8 (..., H, W, 3)")
 

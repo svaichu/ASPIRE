@@ -37,6 +37,8 @@ from cap_harness.elrobot.sim import _OPTICAL_FROM_MUJOCO, CameraFrame, build_mod
 CONTROL_CONTRACT_VERSION = "elrobot-remote-1"
 #: Steps of the control rate sent per ``get_action`` reply (0.5 s at 50 Hz).
 CHUNK_STEPS = 25
+#: The real cameras' native frame size; the dataset stores them squashed to 224x224.
+REAL_SOURCE_SIZE = (640, 480)
 #: The first waypoint of a trajectory may differ from the arm's reported state by this much.
 START_TOLERANCE_RAD = 0.2
 #: Wall-clock allowance beyond a trajectory's own duration for the bridge to finish and ack.
@@ -210,10 +212,19 @@ class RemoteLink:
 class RealCameraModel:
     """Pinhole camera in the robot base frame, with depth from the table plane."""
 
-    def __init__(self, base_from_camera: np.ndarray, vertical_fov_deg: float, table_z: float):
+    def __init__(
+        self,
+        base_from_camera: np.ndarray,
+        vertical_fov_deg: float,
+        table_z: float,
+        source_size: tuple[int, int] | None = None,
+    ):
+        """``source_size`` is the (width, height) the field of view was measured on, when the
+        frames this camera delivers were resized from it without keeping the aspect ratio."""
         self.base_from_camera = np.asarray(base_from_camera, np.float64).reshape(4, 4)
         self.vertical_fov_deg = float(vertical_fov_deg)
         self.table_z = float(table_z)
+        self.source_size = source_size
         self._depth_cache: dict[tuple[int, int], np.ndarray] = {}
 
     @classmethod
@@ -241,25 +252,82 @@ class RealCameraModel:
         top = model.geom("table_top")
         base_z = data.xpos[model.body("base_link").id][2]
         table_z = float(data.geom_xpos[top.id][2] + model.geom_size[top.id][2] - base_z)
-        return cls(transform, layout["vertical_fov_deg"], table_z)
+        return cls(transform, layout["vertical_fov_deg"], table_z, source_size=REAL_SOURCE_SIZE)
 
     def intrinsics(self, width: int, height: int) -> np.ndarray:
-        focal = (height / 2.0) / np.tan(np.deg2rad(self.vertical_fov_deg) / 2.0)
-        return np.array([[focal, 0.0, width / 2.0], [0.0, focal, height / 2.0], [0.0, 0.0, 1.0]])
+        """Pinhole intrinsics for a ``width`` x ``height`` frame.
 
-    def table_depth(self, width: int, height: int) -> np.ndarray:
+        Frames squashed from another aspect ratio have different focal lengths along each
+        axis: the real overhead frames are 640x480 shrunk to 224x224, so ``fx = f * 224/640``
+        and ``fy = f * 224/480``, with ``f`` the focal length in source pixels.
+        """
+        source_w, source_h = self.source_size or (width, height)
+        f_source = (source_h / 2.0) / np.tan(np.deg2rad(self.vertical_fov_deg) / 2.0)
+        fx, fy = f_source * width / source_w, f_source * height / source_h
+        return np.array([[fx, 0.0, width / 2.0], [0.0, fy, height / 2.0], [0.0, 0.0, 1.0]])
+
+    def pose(self, joints: np.ndarray) -> np.ndarray:
+        """4x4 base-from-camera (optical convention) with the arm at ``joints``."""
+        return self.base_from_camera
+
+    def table_depth(
+        self, width: int, height: int, base_from_camera: np.ndarray | None = None
+    ) -> np.ndarray:
         """Distance along the optical axis to the table plane, 0 where the ray misses it."""
+        static = base_from_camera is None
         key = (width, height)
-        if key not in self._depth_cache:
-            k = self.intrinsics(width, height)
-            u, v = np.meshgrid(np.arange(width) + 0.5, np.arange(height) + 0.5)
-            rays = np.stack([(u - k[0, 2]) / k[0, 0], (v - k[1, 2]) / k[1, 1], np.ones_like(u)], -1)
-            world = rays @ self.base_from_camera[:3, :3].T
-            height_above = self.base_from_camera[2, 3] - self.table_z
-            with np.errstate(divide="ignore", invalid="ignore"):
-                depth = np.where(world[..., 2] < -1e-6, height_above / -world[..., 2], 0.0)
-            self._depth_cache[key] = np.where(np.isfinite(depth) & (depth > 0), depth, 0.0)
-        return self._depth_cache[key]
+        if static and key in self._depth_cache:
+            return self._depth_cache[key]
+        pose = self.base_from_camera if static else base_from_camera
+        k = self.intrinsics(width, height)
+        u, v = np.meshgrid(np.arange(width) + 0.5, np.arange(height) + 0.5)
+        rays = np.stack([(u - k[0, 2]) / k[0, 0], (v - k[1, 2]) / k[1, 1], np.ones_like(u)], -1)
+        world = rays @ pose[:3, :3].T
+        height_above = pose[2, 3] - self.table_z
+        with np.errstate(divide="ignore", invalid="ignore"):
+            depth = np.where(world[..., 2] < -1e-6, height_above / -world[..., 2], 0.0)
+        depth = np.where(np.isfinite(depth) & (depth > 0), depth, 0.0)
+        if static:
+            self._depth_cache[key] = depth
+        return depth
+
+
+class WristCameraModel(RealCameraModel):
+    """The arm-mounted camera: fixed to the gripper, so its pose is forward kinematics.
+
+    Mounting and field of view are the scene model's own ``wrist`` camera, which is the design
+    placement of the ElRobot wrist camera; verify it against the real mount before trusting
+    depth-derived positions from this view (the overhead view cross-checks it).
+    """
+
+    def __init__(self, config: ElRobotConfig, table_z: float) -> None:
+        import mujoco
+
+        self._model = build_model(config, gravity_comp=False, objects=False)
+        self._data = mujoco.MjData(self._model)
+        self._lock = threading.Lock()
+        camera = self._model.camera("wrist")
+        self._camera = camera.id
+        self._qadr = np.array([self._model.joint(n).qposadr[0] for n in config.joint_names])
+        self._base = self._model.body("base_link").id
+        super().__init__(np.eye(4), float(self._model.cam_fovy[self._camera]), table_z)
+
+    def pose(self, joints: np.ndarray) -> np.ndarray:
+        import mujoco
+
+        with self._lock:
+            self._data.qpos[self._qadr] = np.asarray(joints, np.float64).reshape(-1)[: len(self._qadr)]
+            mujoco.mj_kinematics(self._model, self._data)
+            mujoco.mj_camlight(self._model, self._data)
+            base_rotation = self._data.xmat[self._base].reshape(3, 3)
+            transform = np.eye(4)
+            transform[:3, :3] = (
+                base_rotation.T @ self._data.cam_xmat[self._camera].reshape(3, 3) @ _OPTICAL_FROM_MUJOCO
+            )
+            transform[:3, 3] = base_rotation.T @ (
+                self._data.cam_xpos[self._camera] - self._data.xpos[self._base]
+            )
+        return transform
 
 
 class RemoteElRobotStation:
@@ -321,12 +389,12 @@ class RemoteElRobotStation:
         if model is None or rgb is None:
             return None
         height, width = rgb.shape[:2]
+        # The pose is for the arm as it was when this frame was captured, not as it is now.
+        pose = model.pose(self.joint_map.to_sim(state.norm)[0])
         depth = state.depth.get(name)
         if depth is None or depth.shape != (height, width):
-            depth = model.table_depth(width, height)
-        return CameraFrame(
-            rgb, depth, model.intrinsics(width, height), model.base_from_camera, state.received_s
-        )
+            depth = model.table_depth(width, height, None if pose is model.base_from_camera else pose)
+        return CameraFrame(rgb, depth, model.intrinsics(width, height), pose, state.received_s)
 
     # -- actuation ---------------------------------------------------------------
 
@@ -424,6 +492,7 @@ __all__ = [
     "CHUNK_STEPS",
     "RealCameraModel",
     "RemoteElRobotStation",
+    "WristCameraModel",
     "RemoteLink",
     "RemoteLinkError",
     "RemoteState",

@@ -71,6 +71,45 @@ class RealJointMap:
         return np.concatenate([norm, grip[..., None]], axis=-1)
 
 
+#: Gripper goals on the real robot: above this the jaws are open, below this they are closed on
+#: something or on nothing (the reading is high when open).
+GRIPPER_OPEN_GOAL = 0.5
+GRIPPER_CLOSED_GOAL = 0.4
+#: A close counts as a pick only this near the table, and only this far from where the jaws opened.
+PICK_MAX_Z_M = 0.08
+PICK_MAX_TRAVEL_M = 0.12
+
+
+def pick_event(gripper_goal: np.ndarray) -> tuple[int, int] | None:
+    """``(open, close)`` frame of the first grasp: the first rise above open, then the first fall."""
+    up = np.where(np.asarray(gripper_goal) > GRIPPER_OPEN_GOAL)[0]
+    if not len(up):
+        return None
+    down = np.where(np.asarray(gripper_goal)[up[0] :] < GRIPPER_CLOSED_GOAL)[0]
+    return (int(up[0]), int(up[0] + down[0])) if len(down) else None
+
+
+def is_clean_pick(tip_at_open: np.ndarray, tip_at_close: np.ndarray) -> bool:
+    """A grasp at the table close to where the jaws opened (not a release over the plate)."""
+    return bool(
+        tip_at_close[2] <= PICK_MAX_Z_M
+        and np.linalg.norm(np.asarray(tip_at_close) - np.asarray(tip_at_open)) <= PICK_MAX_TRAVEL_M
+    )
+
+
+def load_pick_spots(directory: str | Path | None = None, *, min_picks: int = 5) -> dict[str, tuple[float, float]]:
+    """Where operators grasp each topping, xy in the base frame, for toppings with enough picks.
+
+    Written by ``pizza-robot/real/derive_pick_spots.py``. Empty if the file is absent. The
+    layout's tray centres were read by eye and miss the grasp by ~5 cm (cheese); these do not.
+    """
+    path = Path(directory or REAL_DIR) / "pick_spots.json"
+    if not path.exists():
+        return {}
+    spots = json.loads(path.read_text())["spots"]
+    return {name: tuple(entry["xy"]) for name, entry in spots.items() if entry["n"] >= min_picks}
+
+
 def load_real_episodes(directory: str | Path | None = None) -> list[RealEpisode]:
     """The exported demonstrations (``pizza-robot/real/episodes.npz``), one per episode."""
     data = np.load(Path(directory or REAL_DIR) / "episodes.npz")
@@ -96,8 +135,15 @@ def load_calibration(directory: str | Path | None = None) -> dict:
 __all__ = [
     "REAL_GRIPPER_CLOSED",
     "REAL_GRIPPER_OPEN",
+    "GRIPPER_CLOSED_GOAL",
+    "GRIPPER_OPEN_GOAL",
+    "PICK_MAX_TRAVEL_M",
+    "PICK_MAX_Z_M",
     "RealEpisode",
     "RealJointMap",
+    "is_clean_pick",
     "load_calibration",
+    "load_pick_spots",
     "load_real_episodes",
+    "pick_event",
 ]
