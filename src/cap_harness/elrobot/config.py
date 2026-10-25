@@ -48,6 +48,10 @@ class ElRobotConfig:
     joint_limits_upper: np.ndarray
     gripper_open_rad: float
     gripper_closed_rad: float
+    #: Per-joint speed the planner may command, rad/s. From the real demonstrations (see
+    #: ``pizza-robot/real/analyze.py``), not from the servos' capability: the real operator
+    #: never sustained more, and a pinched item does not survive a faster swing.
+    joint_speed_limits_rad_s: np.ndarray
     control_frequency_hz: float = 50.0
     camera_resolution: tuple[int, int] = (640, 480)  # width, height
     base_frame: str = BASE_FRAME
@@ -92,6 +96,9 @@ def load_config(station: str = "pizza", *, directory: str | Path | None = None) 
         joint_limits_upper=np.asarray(upper, dtype=np.float64),
         gripper_open_rad=opened,
         gripper_closed_rad=closed,
+        joint_speed_limits_rad_s=np.asarray(
+            home.get("joint_speed_limits_rad_s", [1.0] * 7), dtype=np.float64
+        ),
     )
     if bool(np.any(config.home_joints < config.joint_limits_lower)) or bool(
         np.any(config.home_joints > config.joint_limits_upper)

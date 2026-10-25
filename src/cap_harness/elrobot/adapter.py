@@ -43,9 +43,8 @@ TRAJECTORY_SETTLE_S = 0.5
 #: -- it exists to catch an arm blocked by contact, which stops short and would
 #: otherwise report success.
 TRAJECTORY_JOINT_TOLERANCE_RAD = 0.05
-HOMING_JOINT_SPEED_RAD_S = 0.6
 MINIMUM_HOMING_S = 1.0
-MAXIMUM_HOMING_S = 6.0
+MAXIMUM_HOMING_S = 12.0
 HOME_DIAGNOSTIC_TOLERANCE_RAD = 0.03
 #: A normalized gripper reading at or above this counts as open.
 GRIPPER_OPEN_THRESHOLD = 0.95
@@ -336,8 +335,10 @@ class ElRobotAdapter:
         )
 
     def _homing_duration_s(self) -> float:
-        worst = float(np.max(np.abs(self._env.joint_positions() - self._env.config.home_joints)))
-        return float(min(MAXIMUM_HOMING_S, max(MINIMUM_HOMING_S, worst / HOMING_JOINT_SPEED_RAD_S)))
+        config = self._env.config
+        travel = np.abs(self._env.joint_positions() - config.home_joints)
+        seconds = float(np.max(travel / config.joint_speed_limits_rad_s))
+        return float(min(MAXIMUM_HOMING_S, max(MINIMUM_HOMING_S, seconds)))
 
     def go_home(self, *, arm: str = "arm", duration: float | None = None) -> ExecutionResult:
         """Joint-space move to the profile's home, scaled to distance, gripper opened.
@@ -403,8 +404,15 @@ class ElRobotAdapter:
             "arm_names": list(ARMS),
             "control_contract": contract,
             "control_contract_version": contract.get("version"),
-            "action_lower_bounds": config.joint_limits_lower.tolist(),
-            "action_upper_bounds": config.joint_limits_upper.tolist(),
+            # CapApi turns these into the per-tick step of its interpolating planner
+            # (bound / control_frequency), so they carry the per-joint SPEED limit, rad/s --
+            # joint position limits would make it a 3 rad/s planner. Position limits are
+            # enforced by the plant and reported below.
+            "action_lower_bounds": (-config.joint_speed_limits_rad_s).tolist(),
+            "action_upper_bounds": config.joint_speed_limits_rad_s.tolist(),
+            "joint_speed_limits_rad_s": config.joint_speed_limits_rad_s.tolist(),
+            "joint_limits_lower": config.joint_limits_lower.tolist(),
+            "joint_limits_upper": config.joint_limits_upper.tolist(),
             "home_joints": config.home_joints.tolist(),
             "physical_motion_authorized": self._allow_physical_motion,
             "command_count": self._command_count,

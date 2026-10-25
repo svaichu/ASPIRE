@@ -99,13 +99,21 @@ Where the build departed from the plan below, and why:
 - **Server** `python -m cap_harness.agent.elrobot_server` (`scripts/start_pizza_system2.sh`).
   No Viser page yet: the visualizer is YAM-URDF specific.
 - **Validation.** `tests/test_elrobot.py` (plant, IK, interlock, perception, two physical
-  pick-and-place regressions, and the full 3 slices + 4 sticks episode),
+  pick-and-place regressions, and a 3 slices + 2 sticks episode),
   `pizza-robot/scripts/reference_episode.py`, and `pizza-robot/scripts/mcp_smoke.py` (one
   slice over the real MCP interface).
 
+**Grounded in the real dataset (`ApoorvaBajaj/pizza-topping-camera-cleaned`).** Loaded with
+`robotdataset`; the layout, camera, Home pose and joint speeds now come from the 30 real
+demonstrations (`pizza-robot/real/`, see docs/pizza-robot.md): the pizza is 36 cm across and
+moved to its real position, the camera stand sits at the fitted pose, Home is the real rest
+pose, speeds are the demos' p99, and a replay of real demos tracks to ~5 mrad RMS. No objects
+were added or changed; the two containers moved (they cannot sit where the small real trays do).
+
 Open items: a viewer for the sim (Viser), operator-facing success scoring outside the agent's
 reach, recovery from items knocked onto the bare table (unvalidated), a trial with a model
-agent in the loop (everything above was exercised with scripted clients), and milestones 7-8.
+agent in the loop (everything above was exercised with scripted clients), carrying cheese sticks
+across the table (they twist out of the pads on long joint-space swings), and milestones 7-8.
 The questions at the bottom remain open, except that the camera question is answered:
 `overhead` + `wrist` were enough.
 

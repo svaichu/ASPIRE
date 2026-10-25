@@ -34,10 +34,13 @@ from cap_harness.elrobot.poses import grasp_pose
 #: lean turns the tilt direction about vertical (0 = away from the base).
 DEFAULT_TILTS = (40.0, 30.0, 50.0, 20.0)
 DEFAULT_LEANS = (0.0, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0, 180.0)
-#: A path point counts as blocked only once it overlaps the scene by this much,
-#: metres. Fingertips are meant to rest on a bin floor at the grasp, so mere contact
-#: is allowed; a wall or the table in the way shows up as penetration.
-PENETRATION_M = 0.0005
+#: A path point counts as blocked only once it overlaps the scene by this much, metres.
+#: Fingertips are meant to rest on a bin floor at the grasp, and the pad's lower corner dips a
+#: few millimetres below the fingertip at the standard tilt, into a floor that gives
+#: (it is a soft contact, and the grips hold with it). A wall or the table in the way shows up
+#: as far more than this. Calibrated against pick success: 0.5 mm refused approaches that
+#: physically work, and steered cheese toward approaches that grip worse.
+PENETRATION_M = 0.0035
 PATH_SAMPLES = 8
 
 

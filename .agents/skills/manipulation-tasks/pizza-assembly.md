@@ -7,7 +7,8 @@ semantics, perception and the approach planner, and the
 [task context](../../../examples/elrobot_sim/pizza_assembly/TASK_CONTEXT.md) for the
 scene, item dimensions and completion predicate. This recipe is the same procedure as
 the runnable reference, `pizza-robot/scripts/reference_episode.py`, which places
-3 slices and 4 sticks in about a minute of simulated work.
+3 slices and 4 sticks (slices reliably; sticks less so, see the carry note in the tool skill) in
+about two minutes of simulated work.
 
 ## Plan once, then loop
 
@@ -16,12 +17,13 @@ its measured position), and what failed. For a multi-stage request announce the 
 stage once, then run the loop with tool calls and no commentary.
 
 1. **Home** once at startup (`cap_program_go_home`); report `home_verified`.
-2. **Place slots on the plate** before picking. Spread items so a release never lands on
-   or drags a placed one: slices on a ring of radius ≈ 55 mm around the plate centre
-   (0, 0.21), 120° apart — `(0, 0.265)`, `(−0.048, 0.182)`, `(0.048, 0.182)` — and
-   cheese sticks inside the ring at `(0, 0.21)`, `(0, 0.235)`, `(0, 0.185)`,
-   `(0.03, 0.21)`. If the operator asks for more, add slots ≥ 35 mm from every
-   neighbour and 25 mm inside the plate edge (radius 110 mm); never stack.
+2. **Place slots on the pizza** before picking, inside the part the arm can reach (the
+   near-left of the pizza, around `(0.22, 0.22)`). Spread items so a release never lands
+   on or drags a placed one: slices on a ring of radius ≈ 55 mm around that point, 120°
+   apart — `(0.22, 0.275)`, `(0.172, 0.192)`, `(0.268, 0.192)` — and cheese sticks inside
+   the ring at `(0.22, 0.22)`, `(0.22, 0.245)`, `(0.22, 0.195)`, `(0.245, 0.22)`. If the
+   operator asks for more, add slots ≥ 35 mm from every neighbour inside x ≈ 0.14–0.30;
+   never stack, and never aim at the pizza's far side (out of reach).
 3. **Order**: all slices first, then cheese. Within an ingredient take the middle of
    the remaining items first (`salami center`), then whichever qualifier names an item
    with room around it; edge items next to a wall are last.
@@ -37,14 +39,14 @@ stage once, then run the loop with tool calls and no commentary.
    | Item | grasp z | hover | jaw axis |
    | --- | --- | --- | --- |
    | salami slice | 0.016 | 0.07 | default (tangent) |
-   | cheese stick | 0.023 | 0.07 | `--jaw-azimuth 90` (sticks lie along x; close across them) |
+   | cheese stick | 0.025 | 0.07 | `--jaw-azimuth 90` (sticks lie along x; close across them) |
 
    `python -m cap_harness.elrobot.approach X Y Z --hover 0.07 [--jaw-azimuth 90]`.
    It tries tilt 40° first, then 30°, 50°, 20°, with several lean directions. Use the
    `hover_pose` and `grasp_pose` of the first `clear: true` result. No clear result →
    skip this item for now (it may clear once its neighbours are gone); if nothing is
    clear, report which items and the blocking obstacle.
-3. `cap_set_gripper(1.0)`; `cap_move_to_pose(hover_pose)`; `cap_move_to_pose(grasp_pose)`.
+3. `cap_set_gripper(1.0)`; `cap_move_to_pose(hover_pose, max_steps=800)`; `cap_move_to_pose(grasp_pose, max_steps=800)`.
    Look at the returned image: the open jaws should straddle the item with no neighbour
    between them. A tracking error here means contact — retreat to hover, do not push.
 4. `cap_set_gripper(0.0)`. Read the gripper: slice ≈ 0.55–0.60, stick ≈ 0.17–0.20. Empty
@@ -58,7 +60,8 @@ stage once, then run the loop with tool calls and no commentary.
 
 ## Transit and place
 
-1. From the lifted hover pose go straight to the plate slot's hover: ask the planner
+1. From the lifted hover pose go to the pizza slot's hover (a long carry: see the tool skill's
+   note on carrying; for a stick, re-read the gripper at the destination hover first): ask the planner
    for `X Y 0.035 --hover 0.11` at the slot (same jaw axis as the pick), move to its
    `hover_pose` then its `grasp_pose` (the release pose, 35 mm above the table, about
    25 mm above the plate surface).

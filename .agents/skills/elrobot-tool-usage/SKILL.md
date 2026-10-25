@@ -21,8 +21,8 @@ bins, plate, table or the arm itself. You own clearance. See
 
 | Tool | Use |
 | --- | --- |
-| `cap_program_go_home` | Opens the gripper, then joint-space move to the folded Home beside the base. Once per fresh session; on request. |
-| `cap_move_to_pose` | `target_pose` = `{position:[x,y,z], frame:"robot_base", quaternion_wxyz:[w,x,y,z]}` (or `rpy_deg`, exactly one). Omit `strategy`: mink is the only IK and is the default. |
+| `cap_program_go_home` | Opens the gripper, then joint-space move to the folded Home (the real robot's rest pose, tucked beside the base). Once per fresh session; on request. |
+| `cap_move_to_pose` | `target_pose` = `{position:[x,y,z], frame:"robot_base", quaternion_wxyz:[w,x,y,z]}` (or `rpy_deg`, exactly one). Omit `strategy`: mink is the only IK and is the default. **Pass `max_steps: 800`** (see [Speed](#speed)). |
 | `cap_move_to_joints` | Seven radian targets. For recovery or a known-safe fold; it is **not** IK. |
 | `cap_set_gripper` | `position` 0 closed … 1 open. Returns only after the jaws stop moving. |
 | `cap_localize_object` | `query` + optional `camera_name`. Colour segmentation + depth (see [Perception](#perception)). |
@@ -53,6 +53,15 @@ Tool results carry terminal state and images; do not insert waits.
   across the line from the base; `--jaw-azimuth D` instead closes along the base-frame
   direction `D` (0 = +x, 90 = +y). The printed JSON is a ready `target_pose`.
 
+## Speed
+
+The arm moves at the real robot's speeds: per-joint limits of 0.8–1.3 rad/s, taken from the
+99th percentile of the real teleoperated demonstrations. A large move takes seconds, which is
+many 20 ms ticks, and `cap_move_to_pose` / `cap_move_to_joints` refuse a plan longer than
+`max_steps` (default 120 = 2.4 s) with "planned trajectory exceeds max_steps". That is not a
+failed pose: **pass `max_steps: 800`** on every motion and the same pose works. Do not ask
+for faster; the limit is deliberate (a pinched item does not survive a faster swing).
+
 ## Reach
 
 This wrist cannot hold the gripper pointing straight down over most of the table, and
@@ -61,6 +70,9 @@ a fixed jaw yaw makes things worse. What was measured:
 - **Tilt 40° is reachable everywhere** that matters (bins, plate, hover heights up to
   ~0.11 m). Tilt 30° fails for a few far positions at hover height; 20° fails for many.
   Top-down (0°) is mostly unreachable above ~0.06 m. Start at 40° and fall back.
+- **The arm's reach is a ring**: about 0.13 m to 0.33 m from the base, not the whole table.
+  The pizza is 36 cm across and its far side is out of reach; only x ≈ 0.14–0.30 of it can be
+  placed on (which is also where the real operator put toppings). Aim inside that region.
 - A `move_to_pose` whose IK cannot converge fails **before any motion** with
   `ik_unreachable` and the residual. That is information, not a fault: change tilt,
   lean, or height; do not retry the identical pose.
@@ -93,7 +105,13 @@ Rules that follow:
 1. Hover first, descend vertically along the tool axis, retreat the same way.
 2. Do not call Home from inside a bin or with the arm low over the plate: Home is a
    straight joint-space line with no clearance check. Retreat to a hover pose first.
-3. Items shift when touched. Re-localize before every pick; never reuse coordinates
+3. Carrying an item is not covered by the planner. It checks the approach and the descent,
+   not the swing between them, and a move interpolates in **joint** space, so the gripper
+   can tip away from level mid-swing. A cylinder (a cheese stick) pinched at its middle
+   can twist out; a flat slice does not. Check the gripper reading at the destination's
+   hover pose before descending (it must still be in band), and split a long carry into a few
+   short `move_to_pose` steps at carry height with the same orientation (same `quaternion_wxyz`).
+4. Items shift when touched. Re-localize before every pick; never reuse coordinates
    from before a contact.
 
 ## Gripper

@@ -147,6 +147,8 @@ cap-tool-usage. For a pizza task also read
 
 **What differs.**
 
+- Moves run at the real robot's speeds, so pass `max_steps: 800` on `cap_move_to_pose` and
+  `cap_move_to_joints`; the default refuses long plans as "exceeds max_steps".
 - One arm, `arm`. Home opens the one gripper. `cap_move_synchronized`, `left`, `right`
   and the cuRobo `strategy` do not apply; omit `strategy`.
 - There is **no collision-aware planner**. The "never disable collision checking"

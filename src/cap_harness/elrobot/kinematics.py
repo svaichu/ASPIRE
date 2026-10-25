@@ -53,6 +53,10 @@ class ElRobotKinematics:
         self._limits = [mink.ConfigurationLimit(self._model)]
         self._rng = np.random.default_rng(0)
 
+    @property
+    def model(self) -> mujoco.MjModel:
+        return self._model
+
     def model_copy_for_collisions(self) -> mujoco.MjModel:
         """This solver's model (loose items removed) with a small contact margin.
 

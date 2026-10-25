@@ -61,7 +61,9 @@ CLASSES: tuple[ColorClass, ...] = (
         (0.2, 1.0),
     ),
     ColorClass("cheese", ("cheese", "shred", "yellow"), (38.0, 62.0), (0.55, 1.0), (0.45, 1.0)),
-    ColorClass("plate", ("plate", "pizza", "dough", "base"), (50.0, 70.0), (0.1, 0.4), (0.9, 1.0)),
+    ColorClass(
+        "plate", ("plate", "pizza", "dough", "base"), (38.0, 70.0), (0.1, 0.45), (0.85, 1.0)
+    ),
 )
 
 
@@ -124,7 +126,8 @@ def _plate_region(hsv: np.ndarray) -> np.ndarray:
     """The plate and anything sitting on it: the plate colour with its holes filled."""
     plate = next(c for c in CLASSES if c.name == "plate")
     mask = ndimage.binary_closing(_class_mask(hsv, plate), iterations=3)
-    return ndimage.binary_fill_holes(mask)
+    # Dilated so that rim shading, which blends the pizza into the table, still counts as pizza.
+    return ndimage.binary_dilation(ndimage.binary_fill_holes(mask), iterations=5)
 
 
 def _on_plate(segmentation: Segmentation, region: np.ndarray) -> bool:

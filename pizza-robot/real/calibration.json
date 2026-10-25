@@ -1,0 +1,34 @@
+{
+  "joint_order": [
+    "joint1",
+    "joint2",
+    "joint3",
+    "joint4",
+    "joint5",
+    "joint6",
+    "joint7",
+    "gripper"
+  ],
+  "range_min": [
+    1109,
+    991,
+    902,
+    921,
+    138,
+    1036,
+    146,
+    1279
+  ],
+  "range_max": [
+    2987,
+    3105,
+    3194,
+    3175,
+    3958,
+    3060,
+    3950,
+    2817
+  ],
+  "ticks_per_rev": 4096,
+  "note": "position_norm = (ticks - range_min) / (range_max - range_min)"
+}
