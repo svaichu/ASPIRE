@@ -1,5 +1,5 @@
-# Home releases both grippers before the single whole-robot home motion.
-for arm in ("left", "right"):
+# Home releases every gripper before the single whole-robot home motion.
+for arm in get_robot_state().joint_positions:
     result = set_gripper(1.0, arm=arm)
     if not result.ok:
         break

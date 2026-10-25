@@ -2,7 +2,9 @@
 
 These execution rules apply when operating the robot through an already configured
 ASPIRE CAP MCP session. For installation and service startup, use the
-[operator runbook](docs/system2.md).
+[operator runbook](docs/system2.md). They are written for the bimanual YAM; where the
+session reports the single-arm **ElRobot** pizza station instead, the
+[ElRobot station](#elrobot-station-simulation) section below overrides them.
 
 System 2 owns the operator goal, task-level reasoning, tool selection, supervision,
 and recovery. Act through registered native `mcp__cap__*` tools; never bypass them
@@ -129,3 +131,48 @@ Keep operator communication concise. Report material stage transitions, interven
 completion, and concrete blockers. Do not expose routine monitoring narration or repeat settled
 facts. End with Home only when requested or when the task contract explicitly requires it.
 Home opens both grippers; when placement is requested, place and release the object before Home.
+
+## ElRobot station (simulation)
+
+Applies when `cap_elrobot__get_controller_metadata` is listed or robot state reports
+embodiment `elrobot`. Operator runbook: [pizza-robot](docs/pizza-robot.md). Everything
+above applies unless this section says otherwise.
+
+**Skills.** At fresh-session startup read
+[elrobot-tool-usage](.agents/skills/elrobot-tool-usage/SKILL.md) once instead of
+cap-tool-usage. For a pizza task also read
+[manipulation-tasks](.agents/skills/manipulation-tasks/SKILL.md), its
+[pizza-assembly](.agents/skills/manipulation-tasks/pizza-assembly.md) recipe and the
+[task context](examples/elrobot_sim/pizza_assembly/TASK_CONTEXT.md). Load no YAM recipe.
+
+**What differs.**
+
+- One arm, `arm`. Home opens the one gripper. `cap_move_synchronized`, `left`, `right`
+  and the cuRobo `strategy` do not apply; omit `strategy`.
+- There is **no collision-aware planner**. The "never disable collision checking"
+  rule becomes: never descend into a bin, tray or onto the plate without a
+  `clear: true` result from the approach planner for that exact target, and never
+  retreat or home from a low pose without first moving to its hover pose.
+- Running the pure-geometry helpers `python -m cap_harness.elrobot.poses` and
+  `python -m cap_harness.elrobot.approach` from the shell is part of normal operation.
+  They read no robot state and command nothing, so they are not "ad-hoc robot code".
+  Writing other code that moves the arm, reading the MJCF or simulator state, or editing
+  the scene is still out of bounds.
+- The simulator holds ground truth (item poses, contact). It is **not** an evidence
+  source for the agent. Judge only from tool results, images, localization and the
+  gripper reading; an agent that inspects scene files to find where things are has
+  stopped doing the task.
+
+**Verification.** A pick is verified by the lift, not the close: the item rises with the
+fingers and the gripper reading is unchanged after the lift. A placement is verified from
+the overhead image after retracting to Home. A pose-reached result and a gripper reading
+in band are execution evidence only.
+
+**Recovery.** A failed grasp changes the approach (next planner result, another tilt,
+re-localized position, a different item); it never changes the success criteria. Three
+failures on one item: leave it and take another. Items that leave the table are lost:
+report the shortfall rather than searching. Report the task blocked only when every
+remaining item has no clear approach, naming the items and the obstruction.
+
+**Completion.** The task contract ends at Home (the unobstructed overhead view is the
+count). Report counts placed, items left or lost, and the retries needed.

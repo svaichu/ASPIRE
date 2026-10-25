@@ -1,5 +1,26 @@
 {
-  "joint_names": ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7", "gripper"],
-  "home_joints": [0.0, 0.8, -1.7, 0.0, 0.0, 1.2, 0.0, 0.0],
-  "settle_tolerance_rad": 0.08
+  "joint_names": [
+    "joint1",
+    "joint2",
+    "joint3",
+    "joint4",
+    "joint5",
+    "joint6",
+    "joint7",
+    "gripper"
+  ],
+  "home_joints": [
+    -1.0,
+    -0.72,
+    -0.79,
+    1.28,
+    0.05,
+    1.5,
+    0.0,
+    0.0
+  ],
+  "settle_tolerance_rad": 0.08,
+  "gripper_open_rad": 0.0,
+  "gripper_closed_rad": 2.2028,
+  "_note": "Jaws are scissor-style and pass through each other: fingertips are 52 mm apart at gripper=0 rad (open) and meet at 2.2028 rad (closed)."
 }

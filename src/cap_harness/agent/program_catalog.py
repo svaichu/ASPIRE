@@ -40,7 +40,7 @@ class CapProgramCatalog:
             CapProgramDefinition("observe", "Read the current robot state.", False),
             CapProgramDefinition(
                 "go_home",
-                "Open both grippers, return both arms to their calibrated home pose, "
+                "Open every gripper, return the arm or arms to their calibrated home pose, "
                 "and report measured joint residuals.",
             ),
         ):

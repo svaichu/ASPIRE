@@ -72,11 +72,44 @@ cameras are wired.
 
 ## Milestones
 
-**Status: milestone 1 done (2026-10-25).** The scene was copied to `pizza-robot/scene/`
-(the `robotdesigner` original is untouched); `scripts/check_scene.py` verifies it.
-Env notes: `.venv-system2` only so far; headless rendering needs `MUJOCO_GL=egl` and
-apt `libegl1 libopengl0` (and `libusb-1.0-0` for pyrealsense2). Renderer teardown
-raises an EGLError on this driver, so scripts exit with `os._exit`.
+**Status (2026-10-25): milestones 1-6 done; 7-8 still deferred.** An agent can run the
+whole pizza task through MCP. How to run, what is in the scene and why it looks the way it
+does: [docs/pizza-robot.md](../docs/pizza-robot.md). What the agent is told:
+[elrobot-tool-usage](../.agents/skills/elrobot-tool-usage/SKILL.md),
+[pizza-assembly](../.agents/skills/manipulation-tasks/pizza-assembly.md), and the ElRobot
+section of [AGENTS.md](../AGENTS.md).
+
+Where the build departed from the plan below, and why:
+
+- **Scene.** The hand-built scene could not be manipulated by this gripper as authored, so it
+  was reworked (copy under `pizza-robot/scene/`, original untouched): jaw collision replaced
+  with flat pads (MuJoCo collides meshes by convex hull), gripper force capped, arm
+  gravity-compensated with stiff servos, timestep 0.5 ms with stiffer contacts, slices on a
+  60 mm pitch in a wider bin, cheese shreds replaced by 9 chunky sticks, walls lowered to 30 mm.
+  Each of those was found by a failed grasp; the reasons are in docs/pizza-robot.md.
+- **Home** is a folded pose beside the base (the plan's raised arch hid the plate from the
+  overhead camera).
+- **Package** `src/cap_harness/elrobot/` has `config`, `sim`, `kinematics`, `ik`, `codec`,
+  `adapter`, `registry`, `station`, plus three modules the plan did not list:
+  `segmentation` (colour segmenter standing in for SAM3), `poses` (grasp-pose geometry) and
+  `approach` (a clearance-checked approach search standing in for cuRobo). The live wrapper
+  and control worker are reused from `yam_real`; they were already embodiment-neutral.
+  Shared code touched: `contracts.JOINT_DIMENSIONS`, `registry` allowlist and prefix,
+  `agent/mcp.py` direct-tool set, and the Home program (now loops over the arms present).
+- **Server** `python -m cap_harness.agent.elrobot_server` (`scripts/start_pizza_system2.sh`).
+  No Viser page yet: the visualizer is YAM-URDF specific.
+- **Validation.** `tests/test_elrobot.py` (plant, IK, interlock, perception, two physical
+  pick-and-place regressions, and the full 3 slices + 4 sticks episode),
+  `pizza-robot/scripts/reference_episode.py`, and `pizza-robot/scripts/mcp_smoke.py` (one
+  slice over the real MCP interface).
+
+Open items: a viewer for the sim (Viser), operator-facing success scoring outside the agent's
+reach, recovery from items knocked onto the bare table (unvalidated), a trial with a model
+agent in the loop (everything above was exercised with scripted clients), and milestones 7-8.
+The questions at the bottom remain open, except that the camera question is answered:
+`overhead` + `wrist` were enough.
+
+## Milestones
 
 1. **Scene hardening (no CAP yet).** Fix `read_camera`-readiness: add
    `<visual><global offwidth offheight/>` to `elrobot_table.xml`, confirm
@@ -85,12 +118,8 @@ raises an EGLError on this driver, so scripts exit with `os._exit`.
    open) and bake it in as `home_joints`. Decide the final qpos layout once
    gripper mimic + any task objects with free joints are finalized, since
    (per the scene's own lesson) joint lookup must go by name, never index.
-   **Done:** `offwidth/offheight` = 1280x960; `wrist` camera moved above the
-   gripper base, pitched down (it was inside the housing and saw only jaws);
-   `scene/home.json` holds `home_joints` = [0, 0.8, -1.7, 0, 0, 1.2, 0, 0]
-   (raised arch, settles within 0.06 rad: gravity sag at kp=10). Caveats: home
-   hovers over the plate and partly occludes the overhead view; the qpos layout
-   (486) is still not final, so no MJCF keyframe was baked in.
+   **Done** (see the status above for what changed since): 1280x960 offscreen, wrist camera moved above the
+   gripper base, home pose baked into `scene/home.json`.
 
 2. **`elrobot` package skeleton + sim-only station.** Write
    `codec.py`, `kinematics.py`, `sim.py`, `adapter.py`, `registry.py`,

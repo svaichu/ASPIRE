@@ -75,8 +75,13 @@ YAM_REAL_PUBLIC_TOOL_NAMES = frozenset(
     {"yam_real.get_task_metadata", "yam_real.get_controller_metadata"}
 )
 
+ELROBOT_PUBLIC_TOOL_NAMES = frozenset(
+    {"elrobot.get_task_metadata", "elrobot.get_controller_metadata"}
+)
+
 _APPROVED_EMBODIMENT_PREFIXES = (
     "behavior.",
+    "elrobot.",
     "yam_real.",
     "libero.",
     "robosuite.",
@@ -369,6 +374,7 @@ __all__ = [
     "LIBERO_PUBLIC_TOOL_NAMES",
     "ROBOSUITE_PUBLIC_TOOL_NAMES",
     "SHARED_PUBLIC_TOOL_NAMES",
+    "ELROBOT_PUBLIC_TOOL_NAMES",
     "YAM_REAL_PUBLIC_TOOL_NAMES",
     "ToolRegistry",
     "ToolSpec",
