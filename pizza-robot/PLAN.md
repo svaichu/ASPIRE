@@ -72,6 +72,12 @@ cameras are wired.
 
 ## Milestones
 
+**Status: milestone 1 done (2026-10-25).** The scene was copied to `pizza-robot/scene/`
+(the `robotdesigner` original is untouched); `scripts/check_scene.py` verifies it.
+Env notes: `.venv-system2` only so far; headless rendering needs `MUJOCO_GL=egl` and
+apt `libegl1 libopengl0` (and `libusb-1.0-0` for pyrealsense2). Renderer teardown
+raises an EGLError on this driver, so scripts exit with `os._exit`.
+
 1. **Scene hardening (no CAP yet).** Fix `read_camera`-readiness: add
    `<visual><global offwidth offheight/>` to `elrobot_table.xml`, confirm
    offscreen rendering of `overhead`/`wrist` at a SAM3-friendly resolution.
@@ -79,6 +85,12 @@ cameras are wired.
    open) and bake it in as `home_joints`. Decide the final qpos layout once
    gripper mimic + any task objects with free joints are finalized, since
    (per the scene's own lesson) joint lookup must go by name, never index.
+   **Done:** `offwidth/offheight` = 1280x960; `wrist` camera moved above the
+   gripper base, pitched down (it was inside the housing and saw only jaws);
+   `scene/home.json` holds `home_joints` = [0, 0.8, -1.7, 0, 0, 1.2, 0, 0]
+   (raised arch, settles within 0.06 rad: gravity sag at kp=10). Caveats: home
+   hovers over the plate and partly occludes the overhead view; the qpos layout
+   (486) is still not final, so no MJCF keyframe was baked in.
 
 2. **`elrobot` package skeleton + sim-only station.** Write
    `codec.py`, `kinematics.py`, `sim.py`, `adapter.py`, `registry.py`,
