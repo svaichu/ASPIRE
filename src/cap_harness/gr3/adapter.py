@@ -57,6 +57,8 @@ TRAJECTORY_TOLERANCE_RAD = 0.01
 TRAJECTORY_START_TOLERANCE_RAD = 0.02
 TRAJECTORY_MAX_STEPS_PER_WAYPOINT = 120
 GRASP_HOLD_RADIUS_M = 0.08
+BIAS_GAIN = 0.15
+BIAS_LIMIT_RAD = 0.2
 # Tool frame = site frame rotated 180 degrees about x (approach axis +z points to the fingertips).
 TOOL_FROM_SITE = np.diag([1.0, -1.0, -1.0])
 
@@ -193,6 +195,7 @@ class Gr3Adapter:
         self._rest_z = float(sim.data[0].xpos[self._cube][2])
         full = self._full_qpos()
         self._target_full = full.copy()
+        self._bias = np.zeros(len(ARM_JOINT_NAMES))
         state = self.get_robot_state()
         self._joint_targets = {"primary": np.array(state.joint_positions["primary"], copy=True)}
         self._gripper_targets = {"primary": float(state.gripper_positions["primary"])}
@@ -276,6 +279,9 @@ class Gr3Adapter:
             g = model.vis.global_
             g.offwidth = max(int(g.offwidth), self.camera_width)
             g.offheight = max(int(g.offheight), self.camera_height)
+            # Software GL (Mesa) dominates step time; shadows, reflections and MSAA are not
+            # needed for localization and cost roughly half of each render.
+            model.vis.quality.offsamples = 0
             self._renderer = mujoco.Renderer(model, self.camera_height, self.camera_width)
             self._render_scratch = mujoco.MjData(model)
         live = self._data()
@@ -289,6 +295,8 @@ class Gr3Adapter:
         mujoco.mj_forward(model, scratch)
         renderer = self._renderer
         renderer.update_scene(scratch, camera=name)
+        renderer.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = False
+        renderer.scene.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
         renderer.disable_depth_rendering()
         rgb = np.ascontiguousarray(renderer.render())
         renderer.enable_depth_rendering()
@@ -331,9 +339,13 @@ class Gr3Adapter:
         if command.gripper_position is not None:
             self._gripper_targets["primary"] = float(command.gripper_position)
         target = self._target_full.copy()
-        target[self._arm_idx] = np.clip(
-            self._joint_targets["primary"], self._arm_lo, self._arm_hi
-        )
+        desired = np.clip(self._joint_targets["primary"], self._arm_lo, self._arm_hi)
+        # The arm's position actuators are soft, so gravity leaves a steady-state offset. An
+        # integral term on the commanded target removes it without changing the joint-space
+        # contract: programs still ask for, and measure, the same joint angles.
+        measured = self._full_qpos()[self._arm_idx]
+        self._bias = np.clip(self._bias + BIAS_GAIN * (desired - measured), -BIAS_LIMIT_RAD, BIAS_LIMIT_RAD)
+        target[self._arm_idx] = np.clip(desired + self._bias, self._arm_lo, self._arm_hi)
         finger = (self._gripper_targets["primary"] - 1.0) * FINGER_TRAVEL_M
         target[self._finger_idx] = finger
         self._target_full = target

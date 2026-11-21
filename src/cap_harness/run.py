@@ -83,8 +83,8 @@ def run_program(
     allow_motion: bool = False,
 ) -> RunOutcome:
     """Run an episode, using its task horizon when max_steps is not supplied."""
-    if benchmark not in {"behavior", "libero-pro", "robosuite", "yam_real"}:
-        raise ValueError("benchmark must be behavior, libero-pro, robosuite, or yam_real")
+    if benchmark not in {"behavior", "gr3", "libero-pro", "robosuite", "yam_real"}:
+        raise ValueError("benchmark must be behavior, gr3, libero-pro, robosuite, or yam_real")
     if init_mode not in {"saved", "seeded"}:
         raise ValueError("init_mode must be 'saved' or 'seeded'")
     if init_mode != "saved" and benchmark != "libero-pro":
@@ -113,6 +113,15 @@ def run_program(
         metadata = registry.resolve(suite, task_id)
         adapter_type = BehaviorAdapter
         extension_allowlist = BEHAVIOR_PUBLIC_TOOL_NAMES
+    elif benchmark == "gr3":
+        from .gr3.adapter import Gr3Adapter
+        from .gr3.registry import Gr3TaskRegistry
+        from .registry import GR3_PUBLIC_TOOL_NAMES
+
+        registry = Gr3TaskRegistry()
+        metadata = registry.resolve(suite, task_id)
+        adapter_type = Gr3Adapter
+        extension_allowlist = GR3_PUBLIC_TOOL_NAMES
     elif benchmark == "yam_real":
         from .registry import YAM_REAL_PUBLIC_TOOL_NAMES
         from .yam_real.adapter import YamRealAdapter
@@ -135,7 +144,7 @@ def run_program(
         stated = getattr(metadata, "horizon", None)
         max_steps = int(stated) if stated else DEFAULT_MAX_STEPS
 
-    if benchmark == "behavior":
+    if benchmark in {"behavior", "gr3"}:
         # Motion is planned in-process on the simulator's own robot model and world geometry.
         provider_capabilities: dict[str, object] = {
             "segmentation": "sam3",
@@ -298,7 +307,7 @@ def run_program(
             "sam3",
         )
         contact_graspnet = TracedProvider(ContactGraspNetProvider(), recorder, "contact_graspnet")
-        if benchmark == "behavior":
+        if benchmark in {"behavior", "gr3"}:
             from .contracts import MotionStrategy
 
             planner = TracedProvider(adapter.planner(), recorder, "curobo")  # type: ignore[attr-defined]
@@ -309,7 +318,7 @@ def run_program(
                 ik_providers={"curobo": planner},
                 trajectory_planning_providers={"curobo": planner},
                 integrated_pose_planning_providers={"curobo-integrated": planner},
-                default_camera="head",
+                default_camera="head" if benchmark == "behavior" else "rs_agentview",
                 default_motion_strategy=MotionStrategy(
                     ik_solver="curobo",
                     trajectory_planner="curobo",
