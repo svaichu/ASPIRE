@@ -71,12 +71,18 @@ BEHAVIOR_PUBLIC_TOOL_NAMES = frozenset(
 )
 """Nonprivileged BEHAVIOR-1K (R1 Pro) metadata, base, torso and standoff-geometry extensions."""
 
+GR3_PUBLIC_TOOL_NAMES = frozenset(
+    {"gr3.get_task_metadata", "gr3.get_controller_metadata"}
+)
+"""Nonprivileged GR-3 humanoid (robotenv) metadata extensions."""
+
 YAM_REAL_PUBLIC_TOOL_NAMES = frozenset(
     {"yam_real.get_task_metadata", "yam_real.get_controller_metadata"}
 )
 
 _APPROVED_EMBODIMENT_PREFIXES = (
     "behavior.",
+    "gr3.",
     "yam_real.",
     "libero.",
     "robosuite.",

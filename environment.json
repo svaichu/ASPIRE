@@ -1,0 +1,224 @@
+{
+  "checks": [
+    {
+      "details": {
+        "executable": "/root/ASPIRE/.venv-robosuite/bin/python",
+        "version": "3.12.3"
+      },
+      "duration_ms": 0,
+      "name": "python",
+      "required": true,
+      "status": "pass",
+      "summary": "Python 3.12.3 is supported"
+    },
+    {
+      "details": {
+        "machine": "x86_64",
+        "release": "6.6.159+",
+        "system": "Linux"
+      },
+      "duration_ms": 0,
+      "name": "platform",
+      "required": false,
+      "status": "pass",
+      "summary": "Linux/x86_64 platform detected"
+    },
+    {
+      "details": {
+        "driver_versions": [
+          "580.82.07"
+        ],
+        "gpu_count": 1,
+        "models": [
+          "NVIDIA L4"
+        ],
+        "return_code": 0
+      },
+      "duration_ms": 22,
+      "name": "nvidia",
+      "required": false,
+      "status": "pass",
+      "summary": "1 NVIDIA GPU(s) visible"
+    },
+    {
+      "details": {
+        "MUJOCO_GL": null,
+        "PYOPENGL_PLATFORM": null,
+        "egl_library": "libEGL.so.1",
+        "vendor_files": []
+      },
+      "duration_ms": 6,
+      "name": "egl",
+      "required": false,
+      "status": "warn",
+      "summary": "EGL environment/configuration is incomplete (allowed in CPU-only unit mode)"
+    },
+    {
+      "details": {
+        "error": null,
+        "path": "/root/ASPIRE",
+        "project_files": true,
+        "writable": true
+      },
+      "duration_ms": 0,
+      "name": "source_checkout",
+      "required": true,
+      "status": "pass",
+      "summary": "repository checkout is writable and contains the project locks"
+    },
+    {
+      "details": {
+        "active_matches_requested": true,
+        "active_path": "/root/ASPIRE/.venv-robosuite",
+        "basename_matches": true,
+        "error": "path does not exist",
+        "expected_basename": null,
+        "inside_source": true,
+        "path": "/root/ASPIRE/.venv-libero",
+        "writable": false
+      },
+      "duration_ms": 0,
+      "name": "python_environment",
+      "required": true,
+      "status": "fail",
+      "summary": "requested Python environment must be active, writable, and correctly named"
+    },
+    {
+      "details": {
+        "failures": {},
+        "imported": {
+          "cap_harness": "0.1.0",
+          "numpy": "1.26.4",
+          "requests": "2.34.2",
+          "scipy": "1.17.1",
+          "yaml": "6.0.3"
+        }
+      },
+      "duration_ms": 487,
+      "name": "core_package_imports",
+      "required": true,
+      "status": "pass",
+      "summary": "all required core packages import"
+    },
+    {
+      "details": {
+        "failures": {
+          "gymnasium": "ModuleNotFoundError: No module named 'gymnasium'",
+          "libero": "ModuleNotFoundError: No module named 'libero'",
+          "torch": "ModuleNotFoundError: No module named 'torch'"
+        },
+        "imported": {
+          "mujoco": "3.3.0",
+          "robosuite": "1.4.0"
+        }
+      },
+      "duration_ms": 644,
+      "name": "libero_package_imports",
+      "required": false,
+      "status": "warn",
+      "summary": "3 LIBERO package import(s) failed (allowed in CPU-only unit mode)"
+    },
+    {
+      "details": {
+        "configured_paths": {},
+        "path_config": "/root/ASPIRE/.libero/config.yaml",
+        "path_errors": [
+          "path config is missing"
+        ],
+        "submodule": "/root/ASPIRE/third_party/LIBERO-PRO",
+        "submodule_populated": false,
+        "validation_config": "/root/ASPIRE/src/cap_harness/configs/libero/validation_cases.yaml",
+        "validation_config_present": true
+      },
+      "duration_ms": 0,
+      "name": "libero_paths",
+      "required": false,
+      "status": "warn",
+      "summary": "LIBERO validation config, upstream path config, or populated submodule is invalid"
+    },
+    {
+      "details": {
+        "services": [
+          {
+            "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+            "host": "127.0.0.1",
+            "http_status": null,
+            "name": "sam3",
+            "port": 8114,
+            "responding": false
+          },
+          {
+            "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+            "host": "127.0.0.1",
+            "http_status": null,
+            "name": "pyroki",
+            "port": 8116,
+            "responding": false
+          },
+          {
+            "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+            "host": "127.0.0.1",
+            "http_status": null,
+            "name": "curobo",
+            "port": 8118,
+            "responding": false
+          }
+        ]
+      },
+      "duration_ms": 1,
+      "name": "services",
+      "required": false,
+      "status": "warn",
+      "summary": "one or more model services are unreachable (allowed in CPU-only unit mode)"
+    },
+    {
+      "details": {},
+      "duration_ms": 0,
+      "name": "single_reset",
+      "required": false,
+      "status": "skipped",
+      "summary": "single reset not requested"
+    }
+  ],
+  "environment": {
+    "captured_at": "2026-11-21T11:56:49.615928Z",
+    "graphics_and_devices": {
+      "MUJOCO_GL": "egl"
+    },
+    "packages": {
+      "cap-harness": "0.1.0",
+      "isaacsim": null,
+      "jax": null,
+      "libero": null,
+      "mujoco": "3.3.0",
+      "numpy": "1.26.4",
+      "nvidia-curobo": null,
+      "omnigibson": null,
+      "pyroki": null,
+      "robosuite": "1.4.0",
+      "torch": null
+    },
+    "paths": {
+      "environment": "/root/ASPIRE/.venv-libero",
+      "libero_path_config": "/root/ASPIRE/.libero/config.yaml",
+      "libero_submodule": "/root/ASPIRE/third_party/LIBERO-PRO",
+      "repository": "/root/ASPIRE",
+      "validation_config": "/root/ASPIRE/src/cap_harness/configs/libero/validation_cases.yaml"
+    },
+    "platform": {
+      "machine": "x86_64",
+      "release": "6.6.159+",
+      "system": "Linux"
+    },
+    "python": {
+      "executable": "/root/ASPIRE/.venv-robosuite/bin/python",
+      "implementation": "CPython",
+      "version": "3.12.3"
+    },
+    "unit_mode": true
+  },
+  "generated_at": "2026-11-21T11:56:49.615895Z",
+  "mode": "unit",
+  "schema_version": 1,
+  "success": false
+}
