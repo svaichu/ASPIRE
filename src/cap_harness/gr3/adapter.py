@@ -57,7 +57,8 @@ TRAJECTORY_TOLERANCE_RAD = 0.01
 TRAJECTORY_START_TOLERANCE_RAD = 0.02
 TRAJECTORY_MAX_STEPS_PER_WAYPOINT = 120
 GRASP_HOLD_RADIUS_M = 0.08
-BIAS_GAIN = 0.15
+BIAS_GAIN = 0.03
+WAIST_STIFFNESS_SCALE = 8.0
 BIAS_LIMIT_RAD = 0.2
 # Tool frame = site frame rotated 180 degrees about x (approach axis +z points to the fingertips).
 TOOL_FROM_SITE = np.diag([1.0, -1.0, -1.0])
@@ -187,6 +188,7 @@ class Gr3Adapter:
             model, mujoco.mjtObj.mjOBJ_BODY, f"rs_{metadata.target}_main"
         )
         self._mujoco = mujoco
+        self._stiffen_waist(model, mujoco)
         self.control_period_s = float(sim.control_dt)
         self.control_frequency = 1.0 / self.control_period_s
         self._elapsed_steps = 0
@@ -194,8 +196,10 @@ class Gr3Adapter:
         self._protocol_evaluator = None
         self._rest_z = float(sim.data[0].xpos[self._cube][2])
         full = self._full_qpos()
-        self._target_full = full.copy()
-        self._bias = np.zeros(len(ARM_JOINT_NAMES))
+        self._desired_full = full.copy()
+        self._bias = np.zeros(len(full))
+        self._bias_limit = np.full(len(full), 0.0)
+        self._bias_limit[self._arm_idx] = BIAS_LIMIT_RAD
         state = self.get_robot_state()
         self._joint_targets = {"primary": np.array(state.joint_positions["primary"], copy=True)}
         self._gripper_targets = {"primary": float(state.gripper_positions["primary"])}
@@ -211,6 +215,23 @@ class Gr3Adapter:
         if self._run_observer is not None:
             self._run_observer.on_reset(observation, metadata.to_manifest_record())
         return observation
+
+    def _stiffen_waist(self, model: Any, mujoco: Any) -> None:
+        """The stock waist position gains let the torso sag under the extended arm (about 0.06 rad
+        of pitch), which moves the shoulder 3 cm or more relative to the base frame after IK has
+        been solved. Scale those gains up so the base frame the planner assumes is the base frame
+        the arm actually has."""
+        for index, name in enumerate(self._names):
+            if not name.startswith("waist"):
+                continue
+            joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ext_" + name)
+            for act in range(model.nu):
+                if int(model.actuator_trnid[act, 0]) == joint:
+                    scale = WAIST_STIFFNESS_SCALE
+                    model.actuator_gainprm[act, 0] *= scale
+                    model.actuator_biasprm[act, 1] *= scale
+                    model.actuator_biasprm[act, 2] *= scale
+                    model.actuator_forcerange[act] *= scale
 
     # ------------------------------------------------------------------ native state
 
@@ -338,17 +359,20 @@ class Gr3Adapter:
         self._joint_targets["primary"] = np.array(command.target, copy=True)
         if command.gripper_position is not None:
             self._gripper_targets["primary"] = float(command.gripper_position)
-        target = self._target_full.copy()
-        desired = np.clip(self._joint_targets["primary"], self._arm_lo, self._arm_hi)
-        # The arm's position actuators are soft, so gravity leaves a steady-state offset. An
-        # integral term on the commanded target removes it without changing the joint-space
+        desired = self._desired_full.copy()
+        desired[self._arm_idx] = np.clip(
+            self._joint_targets["primary"], self._arm_lo, self._arm_hi
+        )
+        desired[self._finger_idx] = (self._gripper_targets["primary"] - 1.0) * FINGER_TRAVEL_M
+        # The arm's position actuators are soft, so gravity leaves a steady-state offset. An integral term on the commanded
+        # targets of the arm joints removes the first without changing the joint-space
         # contract: programs still ask for, and measure, the same joint angles.
-        measured = self._full_qpos()[self._arm_idx]
-        self._bias = np.clip(self._bias + BIAS_GAIN * (desired - measured), -BIAS_LIMIT_RAD, BIAS_LIMIT_RAD)
-        target[self._arm_idx] = np.clip(desired + self._bias, self._arm_lo, self._arm_hi)
-        finger = (self._gripper_targets["primary"] - 1.0) * FINGER_TRAVEL_M
-        target[self._finger_idx] = finger
-        self._target_full = target
+        measured = self._full_qpos()
+        error = desired - measured
+        error[self._finger_idx] = 0.0
+        self._bias = np.clip(self._bias + BIAS_GAIN * error, -self._bias_limit, self._bias_limit)
+        target = np.clip(desired + self._bias, self._all_lo, self._all_hi)
+        target[self._finger_idx] = desired[self._finger_idx]
         span = np.where(self._all_hi > self._all_lo, self._all_hi - self._all_lo, 1.0)
         return np.clip(2.0 * (target - self._all_lo) / span - 1.0, -1.0, 1.0)
 

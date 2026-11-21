@@ -2,21 +2,14 @@
 # so approach with the tool axis tilted 20 degrees off vertical (reachable region of the arm).
 report = {}
 GRASP_QUAT = (0.0664522807, 0.3768696111, 0.9098437265, 0.1604299972)  # tool +z tilted 20 deg from straight down
-CUBE_HALF = 0.025
 
 opened = open_gripper()
 cube = localize_object("red cube", camera_name="rs_agentview")
 report["localized"] = cube.ok
 
 if cube.ok:
-    points = cube.point_cloud.points
-    xs = sorted([float(p[0]) for p in points])
-    ys = sorted([float(p[1]) for p in points])
-    zs = sorted([float(p[2]) for p in points])
-    n = len(points)
-    cx, cy = xs[n // 2], ys[n // 2]
-    top = zs[int(0.95 * (n - 1))]
-    cz = top - CUBE_HALF
+    center = cube.geometry.pose.position
+    cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
     frame = get_robot_state().base_frame
     hover = Pose(position=(cx, cy, cz + 0.12), quaternion_wxyz=GRASP_QUAT, frame=frame)
     approached = move_to_pose(hover, tolerance=0.02, max_steps=400)
