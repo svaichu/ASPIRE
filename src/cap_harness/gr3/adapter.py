@@ -293,7 +293,8 @@ class Gr3Adapter:
 
     # ------------------------------------------------------------------ cameras
 
-    def _camera_observation(self, name: str) -> CameraObservation:
+    def _prepare_render(self, name: str) -> Any:
+        """Copy live state into the render scratch data and load camera ``name``'s scene."""
         mujoco = self._mujoco
         model = self._sim.model
         if self._renderer is None:
@@ -319,6 +320,17 @@ class Gr3Adapter:
         renderer.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = False
         renderer.scene.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
         renderer.disable_depth_rendering()
+        return renderer
+
+    def render_rgb(self, name: str) -> np.ndarray:
+        """RGB only, for live monitoring; programs use :meth:`get_observation`."""
+        return np.ascontiguousarray(self._prepare_render(name).render())
+
+    def _camera_observation(self, name: str) -> CameraObservation:
+        mujoco = self._mujoco
+        model = self._sim.model
+        renderer = self._prepare_render(name)
+        scratch = self._render_scratch
         rgb = np.ascontiguousarray(renderer.render())
         renderer.enable_depth_rendering()
         depth = np.ascontiguousarray(renderer.render(), dtype=np.float64)

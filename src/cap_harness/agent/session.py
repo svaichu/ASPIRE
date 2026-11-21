@@ -69,7 +69,14 @@ class _ReviewedProgramResult:
 
     @property
     def ok(self) -> bool:
-        return self.execution.ok and bool(getattr(self.execution.result, "ok", True))
+        return self.execution.ok and _result_ok(self.execution.result)
+
+
+def _result_ok(result: Any) -> bool:
+    """A program's ``result`` may be a typed result or a report mapping with ``ok``."""
+    if isinstance(result, Mapping):
+        return bool(result.get("ok", True))
+    return bool(getattr(result, "ok", True))
 
 
 def _summary(value: Any, *, depth: int = 0) -> Any:
@@ -384,7 +391,7 @@ class LiveAgentSession:
                 images[f"{phase}.{camera}"] = np.asarray(frame, dtype=np.uint8).copy()
         verification = {
             "program": name,
-            "ok": execution.ok and bool(getattr(execution.result, "ok", True)),
+            "ok": execution.ok and _result_ok(execution.result),
         }
         return _ReviewedProgramResult(
             execution=execution,

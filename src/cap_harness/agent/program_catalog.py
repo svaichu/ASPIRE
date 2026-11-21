@@ -1,5 +1,6 @@
 """Small, immutable catalog of reviewed programs shipped in the wheel."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 import hashlib
 from importlib.resources import files
@@ -31,22 +32,32 @@ class LoadedCapProgram:
         }
 
 
-class CapProgramCatalog:
-    """Expose fixed programs; remote callers cannot supply code or paths."""
+YAM_PROGRAMS = (
+    CapProgramDefinition("observe", "Read the current robot state.", False),
+    CapProgramDefinition(
+        "go_home",
+        "Open both grippers, return both arms to their calibrated home pose, "
+        "and report measured joint residuals.",
+    ),
+)
 
-    def __init__(self) -> None:
+
+class CapProgramCatalog:
+    """Expose fixed programs; remote callers cannot supply code or paths.
+
+    Programs are ``<name>.py`` resources of ``package``; the default is the YAM
+    System 2 catalog.
+    """
+
+    def __init__(
+        self,
+        definitions: Iterable[CapProgramDefinition] = YAM_PROGRAMS,
+        *,
+        package: str = "cap_harness.agent.programs",
+    ) -> None:
         self._programs = {}
-        for definition in (
-            CapProgramDefinition("observe", "Read the current robot state.", False),
-            CapProgramDefinition(
-                "go_home",
-                "Open both grippers, return both arms to their calibrated home pose, "
-                "and report measured joint residuals.",
-            ),
-        ):
-            source = (
-                files("cap_harness.agent.programs").joinpath(f"{definition.name}.py").read_text()
-            )
+        for definition in definitions:
+            source = files(package).joinpath(f"{definition.name}.py").read_text()
             self._programs[definition.name] = LoadedCapProgram(
                 definition, source, hashlib.sha256(source.encode()).hexdigest()
             )

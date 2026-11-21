@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
 from contextlib import asynccontextmanager
@@ -204,6 +204,9 @@ _DIRECT = {
 }
 _READ_ONLY = {"get_robot_state", "localize_object", "yam_real.get_controller_metadata"}
 
+ExtraTool = tuple[str, dict[str, Any], Callable[[dict[str, Any]], dict[str, Any]], bool]
+"""(description, input schema, handler, attach a post-call camera snapshot)."""
+
 
 def _jsonable(value: Any, *, _active: set[int] | None = None) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
@@ -230,15 +233,33 @@ def _jsonable(value: Any, *, _active: set[int] | None = None) -> Any:
 class CapMcpBridge:
     """Keep the remote tool surface small and describe the live capabilities."""
 
-    def __init__(self, session: LiveAgentSession) -> None:
+    def __init__(
+        self,
+        session: LiveAgentSession,
+        *,
+        direct_tools: Iterable[str] | None = None,
+        read_only_tools: Iterable[str] | None = None,
+        motion_strategy: Mapping[str, Any] | None = None,
+        extra_tools: Mapping[str, ExtraTool] | None = None,
+    ) -> None:
+        """Defaults reproduce the YAM System 2 surface.
+
+        ``direct_tools`` and ``read_only_tools`` name registry tools exposed as
+        ``cap_*``; read-only tools run inline, the rest as session jobs.
+        ``motion_strategy`` supplies defaults for omitted ``strategy`` fields;
+        ``extra_tools`` adds embodiment-specific session tools.
+        """
         self.session = session
         configured = session.api.configured_providers
-        allowed = set(_DIRECT)
+        allowed = set(_DIRECT if direct_tools is None else direct_tools)
+        self._read_only = frozenset(_READ_ONLY if read_only_tools is None else read_only_tools)
         if not configured["segmentation"]:
             allowed.discard("localize_object")
         if not configured["ik"] and not configured["pose_planning"]:
             allowed.discard("move_to_pose")
         self._default_ik = next(iter(configured["ik"]), "pyroki")
+        self._strategy_defaults = dict(motion_strategy or {"ik_solver": self._default_ik})
+        self._extra = dict(extra_tools or {})
         self._direct = {
             "cap_" + spec.name.replace(".", "__"): spec
             for spec in session.registry.all_specs(public_only=True)
@@ -282,12 +303,17 @@ class CapMcpBridge:
                 }
             if "strategy" in schema["properties"]:
                 strategy_schema = _motion_strategy_input_schema()
-                strategy_schema["properties"]["ik_solver"]["default"] = self._default_ik
+                for field, default in self._strategy_defaults.items():
+                    strategy_schema["properties"][field]["default"] = default
                 schema["properties"]["strategy"] = {"anyOf": [strategy_schema, {"type": "null"}]}
             specs.append((name, spec.documented_signature, schema))
         specs.extend(
             (p.definition.tool_name, p.definition.summary, _object_schema())
             for p in self.session.program_catalog.all()
+        )
+        specs.extend(
+            (name, description, schema)
+            for name, (description, schema, _handler, _snapshot) in self._extra.items()
         )
         return [
             Tool(name=name, description=description, inputSchema=schema)
@@ -382,6 +408,10 @@ class CapMcpBridge:
             return self._snapshot(value, args["cameras"]) if args.get("cameras") else (value, {})
         if name == "read_operator_messages":
             return {"ok": True, "messages": self.session.drain_steering()}, {}
+        if name in self._extra:
+            _description, _schema, handler, snapshot = self._extra[name]
+            value = handler(args)
+            return self._snapshot(value) if snapshot else (value, {})
         if name.startswith("cap_program_"):
             program = self.session.program_catalog.get_by_tool(name)
             value = self._terminal(self.session.start_named_program(program.definition.name))
@@ -400,20 +430,20 @@ class CapMcpBridge:
             }
         if spec.name in {"move_to_pose", "move_synchronized"}:
             args["strategy"] = MotionStrategy(
-                **{"ik_solver": self._default_ik, **(args.get("strategy") or {})}
+                **{**self._strategy_defaults, **(args.get("strategy") or {})}
             )
-        if spec.name in _READ_ONLY:
+        if spec.name in self._read_only:
             result = spec.function(**args)
             return {"ok": bool(getattr(result, "ok", True)), "result": _compact_summary(result)}, {}
         value = self._terminal(self.session.start_tool(spec.name, args))
         return self._snapshot(value)
 
 
-def create_mcp_transport(session: LiveAgentSession) -> tuple[Any, Any]:
+def create_mcp_transport(session: LiveAgentSession, **bridge_options: Any) -> tuple[Any, Any]:
     from mcp.server.lowlevel import Server
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-    bridge = CapMcpBridge(session)
+    bridge = CapMcpBridge(session, **bridge_options)
     server = Server("cap", version="0.1.0")
 
     @server.list_tools()
